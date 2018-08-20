@@ -1,7 +1,8 @@
-package com.lpraat.circuitbreaker
+package com.lpraat.circuitbreaker.run
 
 import java.io.InputStream
 
+import com.lpraat.circuitbreaker.Utils
 import com.lpraat.circuitbreaker.engine.CollisionDetector.{CLine, CPoint}
 import com.lpraat.circuitbreaker.ga.GeneticAlgorithm
 import com.lpraat.circuitbreaker.ga.GeneticAlgorithm.Chromosome
@@ -13,21 +14,19 @@ import com.lpraat.circuitbreaker.units.Ufo
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
-import scalafx.Includes._
 import scalafx.animation.AnimationTimer
 import scalafx.application
 import scalafx.application.JFXApp
 import scalafx.scene.Scene
 import scalafx.scene.canvas.{Canvas, GraphicsContext}
 import scalafx.scene.control.{Menu, MenuBar, MenuItem}
-import scalafx.scene.input.{KeyCode, KeyEvent}
 import scalafx.scene.layout.BorderPane
 import scalafx.scene.paint.Color
 import scalafx.scene.shape.Line
 
 
 
-object Main extends JFXApp {
+object Ga extends JFXApp {
 
   val Width = 1000
   val Height = 800
@@ -69,33 +68,14 @@ object Main extends JFXApp {
       val menuBar = new MenuBar()
       val configMenu = new Menu("Config")
       val resetMenu = new MenuItem("Reset")
-      val presses: Array[Int] = Array.ofDim(2)
-
       configMenu.items = List(resetMenu)
       menuBar.menus = List(configMenu)
       borderPane.center = canvas
       borderPane.top = menuBar
       root = borderPane
 
-      onKeyPressed = (e: KeyEvent) => {
-        e.code match {
-          case KeyCode.Right => presses(0) = 1
-          case KeyCode.Left => presses(1) = 1
-          case _ => ()
-        }
-      }
-
-      onKeyReleased = (e: KeyEvent) => {
-        e.code match {
-          case KeyCode.Right => presses(0) = 0
-          case KeyCode.Left => presses(1) = 0
-          case _ => ()
-        }
-      }
-
       def updateUfo(dt: Double): State[Ufo, Boolean] = for {
-        _ <- Ufo.updateNnInputs(collisionLines)
-        _ <- Ufo.updatePosition(dt)
+        _ <- Ufo.updateStep(collisionLines)
         hasCollided <- Ufo.collided(allPathLines)
       } yield hasCollided
 
@@ -104,48 +84,35 @@ object Main extends JFXApp {
         u.distance
       }
 
-      /**
-        * Where is my recursive game loop? Where is my immutability?
-        */
       var population: ArrayBuffer[Chromosome] =
-        GeneticAlgorithm.newPopulation(Ufo().nn.weights.map(m => m.columns * m.rows).sum).to[ArrayBuffer]
+        GeneticAlgorithm.newPopulation(Ufo("ga").nn.weights.map(m => m.columns * m.rows).sum).to[ArrayBuffer]
 
       var ufos: ArrayBuffer[(Ufo, Boolean)] = ArrayBuffer()
-      var lastTime: Double = 0.0
-      var acc: Double = 0.0
       var restart: Boolean = true
 
 
-      val timer = AnimationTimer(t => {
+      val ga = AnimationTimer(t => {
 
         if (restart) {
-          @tailrec def buildWeights(matrixDimensions: List[(Int, Int)], weights: Vector[Double],
-                                    nnWeights: Vector[Matrix[Double]]): Vector[Matrix[Double]] =
+          @tailrec def buildWeights(matrixDimensions: List[(Int, Int)], weights: Vector[Double], nnWeights: Vector[Matrix]): Vector[Matrix] =
             matrixDimensions match {
-              case h :: t => buildWeights(t, weights.drop(h._1 * h._2),
-                                          nnWeights :+ Matrix.fill(weights.take(h._1 * h._2)).exec(Matrix(h._1, h._2)))
+              case h :: t => buildWeights(t, weights.drop(h._1 * h._2), nnWeights :+ Matrix(h._1, h._2).fill(weights.take(h._1 * h._2)))
               case _ => nnWeights
             }
 
-          val matrixDimensions = Ufo().nn.weights.foldRight(List[(Int, Int)]()) {
+          val matrixDimensions = Ufo("ga").nn.weights.foldRight(List[(Int, Int)]()) {
             (m, acc) => (m.rows, m.columns) :: acc
           }
 
-
           ufos = population.map(c => c.values).foldLeft(ArrayBuffer[(Ufo, Boolean)]()) {
             (acc, w) => {
-              val newUfo = Ufo()
-              acc :+ (Ufo.updateNn(NeuralNetwork.setWeights(buildWeights(matrixDimensions, w, Vector()))
-                                                .exec(newUfo.nn)).exec(newUfo), false)
+              val newUfo = Ufo("ga")
+              acc :+ (Ufo.updateNn(NeuralNetwork.setWeights(buildWeights(matrixDimensions, w, Vector())).exec(newUfo.nn)).exec(newUfo), false)
             }
           }
 
           restart = false
-          lastTime = t
         } else {
-
-          val dt = (System.nanoTime() - lastTime) / 1e9
-          acc += dt
 
           ufos = ufos.map(t => {
             if (!t._2) { // not collided
@@ -160,35 +127,32 @@ object Main extends JFXApp {
 
           if (!population.exists(_.fitness == 0) ) {
             population = GeneticAlgorithm.generate(population.toVector).to[ArrayBuffer]
-            acc = 0
             restart = true
 
           } else {
 
             gc.clearRect(0, 0, CanvasWidth, CanvasHeight)
             ufos.foreach {
-              case (newUfo, _) =>
+              case (ufo, _) =>
                 gc.save()
-                gc.translate(newUfo.centerX, newUfo.centerY)
-                gc.rotate(newUfo.rotation)
-                gc.translate(-newUfo.centerX, -newUfo.centerY)
+                gc.translate(ufo.centerX, ufo.centerY)
+                gc.rotate(ufo.rotation)
+                gc.translate(-ufo.centerX, -ufo.centerY)
 
                 gc.stroke = Color.Black
-                gc.strokeOval(newUfo.centerX - newUfo.radius, newUfo.centerY - newUfo.radius, newUfo.radius * 2,
-                                                                                              newUfo.radius * 2)
+                gc.strokeOval(ufo.centerX - ufo.radius, ufo.centerY - ufo.radius, ufo.radius * 2,
+                                                                                              ufo.radius * 2)
                 gc.stroke = Color.Green
-                gc.strokeLine(newUfo.centerX, newUfo.centerY, newUfo.centerX + newUfo.radius, newUfo.centerY)
+                gc.strokeLine(ufo.centerX, ufo.centerY, ufo.centerX + ufo.radius, ufo.centerY)
                 gc.restore()
             }
             allPathLines.foreach(pl => gc.strokeLine(pl.startX.value, pl.startY.value, pl.endX.value, pl.endY.value))
             restart = false
           }
-
-          lastTime = t
         }
       })
 
-      timer.start()
+      ga.start()
     }
     }
 }

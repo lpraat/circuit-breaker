@@ -47,8 +47,8 @@ class NeuralNetworkTest extends FunSuite {
     val hiddenLayer: Layer = Layer(Vector.fill(2)(Neuron(Sigmoid)) :+ Neuron(Identity))
     val outputLayer: Layer = Layer(Vector(Neuron(Sign)))
 
-    val w1 = Matrix[Double](Vector(Vector(20, 20, -10), Vector(-20, -20, 30)))
-    val w2 = Matrix[Double](Vector(Vector(20, 20, -30)))
+    val w1 = Matrix(Vector(Vector(20, 20, -10), Vector(-20, -20, 30)))
+    val w2 = Matrix(Vector(Vector(20, 20, -30)))
 
     val xorBuild: State[NeuralNetwork, Unit] = for {
       _ <- NeuralNetwork.setWeights(Vector(w1, w2))
@@ -61,5 +61,40 @@ class NeuralNetworkTest extends FunSuite {
     assert(testIO(Vector(1, 0), 1, xor)) // 1 xor 0 = 1
     assert(testIO(Vector(1, 1), 0, xor)) // 1 xor 1 = 0
   }
+
+  test ("Backpropagation") {
+
+    val inputLayer: Layer = Layer(Vector.fill(2)(Neuron(Identity)) :+ Neuron(Identity))
+    val hiddenLayer: Layer = Layer(Vector.fill(2)(Neuron(Sigmoid)) :+ Neuron(Identity))
+    val outputLayer: Layer = Layer(Vector.fill(2)(Neuron(Sigmoid)))
+
+    val w1 = Matrix(Vector(Vector(0.15, 0.2, 0.35), Vector(0.25, 0.3, 0.35)))
+    val w2 = Matrix(Vector(Vector(0.4, 0.45, 0.6), Vector(0.5, 0.55, 0.6)))
+
+    val nnBuild: State[NeuralNetwork, Unit] = for {
+      _ <- NeuralNetwork.setWeights(Vector(w1, w2))
+    } yield ()
+
+    val nn = nnBuild.exec(NeuralNetwork(Vector(inputLayer, hiddenLayer, outputLayer)))
+    val updatedNn = NeuralNetwork.mgd(Vector((Vector(0.05, 0.1),Vector(0.01, 0.99))), HalfSquaredLoss, 0.5).exec(nn)
+
+    def areDoubleEqual(d1: Double, d2: Double): Boolean = {
+      d2 - 1e-8 <= d1 && d1 <= d2 + 1e-8
+    }
+    assert(areDoubleEqual(updatedNn.weights(0)(0)(0), 0.149780716)) // w1
+    assert(areDoubleEqual(updatedNn.weights(0)(0)(1), 0.19956143))  // w2
+    assert(areDoubleEqual(updatedNn.weights(0)(0)(2), 0.34583369))  // b0
+    assert(areDoubleEqual(updatedNn.weights(0)(1)(0), 0.24975114))  // w3
+    assert(areDoubleEqual(updatedNn.weights(0)(1)(1), 0.29950229))  // w4
+    assert(areDoubleEqual(updatedNn.weights(0)(1)(2), 0.34526327))  // b1
+    assert(areDoubleEqual(updatedNn.weights(1)(0)(0), 0.35891648))  // w5
+    assert(areDoubleEqual(updatedNn.weights(1)(0)(1), 0.408666186)) // w6
+    assert(areDoubleEqual(updatedNn.weights(1)(0)(2), 0.51926966))  // b2
+    assert(areDoubleEqual(updatedNn.weights(1)(1)(0), 0.511301270)) // w7
+    assert(areDoubleEqual(updatedNn.weights(1)(1)(1), 0.561370121)) // w8
+    assert(areDoubleEqual(updatedNn.weights(1)(1)(2), 0.62345319))  // b3
+
+  }
+
 
 }

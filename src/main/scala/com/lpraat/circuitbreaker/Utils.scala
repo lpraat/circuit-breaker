@@ -10,9 +10,7 @@ object Utils {
   def parsePointsLine(inputLine: String): List[(Double, Double)] = {
     inputLine.split(" ").drop(1).map(sPoint => {
       val xy = sPoint.split(",")
-      val x = xy(0).toDouble
-      val y = xy(1).toDouble
-      Tuple2(x,y)
+      Tuple2(xy(0).toDouble, xy(1).toDouble)
     }).toList
   }
 

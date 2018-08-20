@@ -11,10 +11,10 @@ object GeneticAlgorithm {
 
   case class Chromosome(values: Vector[Double], fitness: Double)
 
-  val PopulationSize: Int = 50
-  val CrossoverSize: Int = 49
+  val PopulationSize: Int = 20
   val ElitismSize: Int = 1
-  val Threshold = 0.6 // 1 - mutation_probability
+  val CrossoverSize: Int = PopulationSize - ElitismSize
+  val Threshold = 0.5 // 1 - mutation_probability
   val ValueDim = 100
 
   /**
@@ -30,7 +30,7 @@ object GeneticAlgorithm {
     * Generates a random value.
     * @return the generated value.
     */
-  private def randomValue: Double = {
+  def randomValue: Double = {
     -ValueDim + Math.random() * 2 * ValueDim
   }
 
@@ -40,7 +40,7 @@ object GeneticAlgorithm {
     * @param probabilities all the probabilities of each chromosome to be picked.
     * @return the indexes of the two selected parents.
     */
-  private def selectParents(probabilities: Vector[Double]): (Int, Int) = {
+  def selectParents(probabilities: Vector[Double]): (Int, Int) = {
 
     @tailrec def selectParent(p: Double, probabilities: Vector[(Double, Int)], cumulativeProbability: Double): Int =
       probabilities match {
@@ -61,7 +61,7 @@ object GeneticAlgorithm {
     * @param parent2 the second parent.
     * @return the new offspring chromosome.
     */
-  private def crossover(parent1: Chromosome, parent2: Chromosome): Chromosome = {
+  def crossover(parent1: Chromosome, parent2: Chromosome): Chromosome = {
     val v1 = parent1.values
     val v2 = parent2.values
 
@@ -80,7 +80,7 @@ object GeneticAlgorithm {
     * @param c the chromosome.
     * @return the probably mutated chromosome.
     */
-  private def mutate(c: Chromosome): Chromosome = {
+  def mutate(c: Chromosome): Chromosome = {
 
     @tailrec def loop(n: Int, v: Vector[Double]): Vector[Double] = {
       if (n > 0) {

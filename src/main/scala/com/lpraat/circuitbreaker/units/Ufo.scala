@@ -4,8 +4,9 @@ import com.lpraat.circuitbreaker.Utils
 import com.lpraat.circuitbreaker.engine.CollisionDetector.CLine
 import com.lpraat.circuitbreaker.network._
 import com.lpraat.circuitbreaker.state.State
+import com.lpraat.circuitbreaker.struct.Matrix
 
-import scala.annotation.tailrec
+import scala.util.Random
 import scalafx.scene.shape.{Circle, Line, Shape}
 
 /**
@@ -18,23 +19,36 @@ class Ufo(val sensors: Seq[Sensor], val nn: NeuralNetwork,
   val radius: Int = Ufo.Radius
   val speed: Int = Ufo.Speed
   val circle = Circle(position(0), position(1), radius)
+
   def centerX: Double = circle.centerX.value
   def centerY: Double = circle.centerY.value
+
+  /**
+    * Finds the distances sensed by the sensors.
+    * @param collisionLines the collision lines to be checked.
+    * @return a vector with the distances.
+    */
+  def getSensorValues(collisionLines: Seq[CLine]): Vector[Double] = {
+    sensors.map(s => {
+      val v = s.value(collisionLines)
+      if (v != 0) {
+        10*(1 - v/Sensor.Length) // 10 different ranges
+      } else 0
+    }).toVector
+  }
+
 }
 
 
 object Ufo {
 
   val Radius = 10
-  val Speed = 4
-  val RotationSpeed = 3
+  val Speed = 3
+  val RotationSpeed = 5
   val InitialRotation = 90
-  val InitialPosX = 100
-  val InitialPosY = 220
-  val SensorLength = 400
+  val InitialPosX = 120
+  val InitialPosY = 280
   val AcceptedProbability = 0.9 // sigmoid threshold
-
-  val ops: Seq[(Double, Double)] = List((1, -1), (1, 0), (1,1))
 
   /**
     * Factory for [[Ufo]].
@@ -46,7 +60,7 @@ object Ufo {
     * @param distance the ufo's traveled distance.
     * @param rotation the ufo's rotation.
     */
-  private def apply(sensors: Seq[Sensor], nn: NeuralNetwork,
+   def apply(sensors: Seq[Sensor], nn: NeuralNetwork,
             velocity: Vector[Double], position: Vector[Double],
             distance: Double, rotation: Double): Ufo =
     new Ufo(sensors, nn, velocity, position, distance, rotation)
@@ -55,33 +69,42 @@ object Ufo {
     * Factory for [[Ufo]].
     * It creates a new Ufo form scratch.
     */
-  def apply(): Ufo = {
+  def apply(kind: String): Ufo = {
 
     val startingPosition: Vector[Double] = Vector(InitialPosX, InitialPosY)
+    val thetas = List(-60, 60)
+    val NumberOfSensors = thetas.size
+    val startX = startingPosition(0)
+    val startY = startingPosition(1)
+    val sensors = Vector.fill(NumberOfSensors)((startX, startY)).zip(thetas).map {
+      case ((x, y), theta) => Sensor((x, y), theta, InitialRotation)
+    }
+    val nn: NeuralNetwork = kind match {
 
-    @tailrec def loop(ops: Seq[(Double, Double)], sensors: Vector[Sensor]): Vector[Sensor] = ops match {
-      case op :: tail =>
-        val line = Line(startingPosition(0), startingPosition(1),
-                        startingPosition(0) + (SensorLength - InitialPosX) * op._1,
-                        startingPosition(1) + (SensorLength - InitialPosY) * op._2)
-        loop(tail, sensors :+ Sensor(line, InitialRotation))
-      case _ => sensors
+      case "ga" =>
+        // sensors + bias
+        val inputLayer: Layer = Layer(Vector.fill(NumberOfSensors)(Neuron(Identity)) :+ Neuron(Identity))
+        val hiddenLayer: Layer = Layer(Vector.fill(10)(Neuron(Sigmoid)) :+ Neuron(Identity))
+        // right-left
+        val outputLayer: Layer = Layer(Vector.fill(2)(Neuron(Sigmoid)))
+
+        NeuralNetwork(Vector(inputLayer, hiddenLayer, outputLayer))
+
+      case "rl" =>
+        // sensors + bias
+        val inputLayer = Layer(Vector.fill(NumberOfSensors)(Neuron(Identity)):+ Neuron(Identity))
+        val hiddenLayer = Layer(Vector.fill(10)(Neuron(ReLU)) :+ Neuron(Identity))
+        // Q(s,a) for the three actions either rotate left or right or do nothing.
+        val outputLayer = Layer(Vector.fill(3)(Neuron(Identity)))
+
+        def randomWeight() = -1 + Math.random()*2
+        val w1 = Matrix(Vector.fill(hiddenLayer.neurons.size-1)(Vector.fill(inputLayer.neurons.size)(randomWeight())))
+        val w2 = Matrix(Vector.fill(outputLayer.neurons.size)(Vector.fill(hiddenLayer.neurons.size)(randomWeight())))
+
+        NeuralNetwork.setWeights(Vector(w1,w2)).exec(NeuralNetwork(Vector(inputLayer, hiddenLayer, outputLayer)))
     }
 
-    val nn: NeuralNetwork = {
-
-      // 3-sensor + bias
-      val inputLayer: Layer = Layer(Vector.fill(3)(Neuron(Identity)) :+ Neuron(Identity))
-
-      val hiddenLayer: Layer = Layer(Vector.fill(3)(Neuron(Sigmoid)) :+ Neuron(Identity))
-
-      // right-left
-      val outputLayer: Layer = Layer(Vector.fill(2)(Neuron(Sigmoid)))
-
-      NeuralNetwork(Vector(inputLayer, hiddenLayer, outputLayer))
-    }
-
-    new Ufo(loop(ops, Vector()), nn, Vector(0, 0), startingPosition, 0, InitialRotation)
+    new Ufo(sensors, nn, Vector(0, 0), startingPosition, 0, InitialRotation)
   }
 
   /**
@@ -93,45 +116,125 @@ object Ufo {
   }
 
   /**
-    * Feeds and forwards the sensor values in the neural network.
-    * @param collisionLines the lines to be checked by the sensors to retrieve the distance value.
+    * Does un update step in a normal setting.
+    * @param collisionLines the collision lines to be checked by the sensors.
     */
-  def updateNnInputs(collisionLines: Seq[CLine]): State[Ufo, Unit] = {
-
-    State[Ufo, Unit](u => {
-      val s1 = Sensor.value(collisionLines).run(u.sensors(0))._1
-      val s2 = Sensor.value(collisionLines).run(u.sensors(1))._1
-      val s3 = Sensor.value(collisionLines).run(u.sensors(2))._1
-
+  def updateStep(collisionLines: Seq[CLine]): State[Ufo, Unit] = {
+    State(u => {
       val feedAndForward: State[NeuralNetwork, Unit] = for {
-        _ <- NeuralNetwork.input(Vector(s1, s2, s3))
+        _ <- NeuralNetwork.input(u.getSensorValues(collisionLines))
         _ <- NeuralNetwork.feedForward
       } yield ()
 
-      ((), Ufo(u.sensors, feedAndForward.exec(u.nn), u.velocity, u.position, u.distance, u.rotation))
-    })
-  }
-
-  /**
-    * Updates the ufo's position according to the output of the neural network.
-    * @param dt the time passed since last update.
-    */
-  def updatePosition(dt: Double): State[Ufo, Unit] = {
-    State(u => {
-      val keys = u.nn.outputLayer.neurons.map(n => {
-        if (n.value >= AcceptedProbability) 1 else 0
+      val feedForwardedNn = feedAndForward.exec(u.nn)
+      val max = feedForwardedNn.outputLayer.neurons.map(n => n.value).max
+      val keys = feedForwardedNn.outputLayer.neurons.map(n => {
+        if (n.value >= max && n.value >= AcceptedProbability) 1 else 0
       })
-      ((), update(keys, dt).exec(u))
+      ((), update(keys).exec(u))
+    })
+  }
+
+
+  /**
+    * Experience sample that is stored in the replay memory.
+    * @param s the state.
+    * @param keys the action.
+    * @param reward the reward.
+    * @param s1 the next state.
+    * @param collided the end of episode flag.
+    */
+  case class Experience(s: Vector[Double], keys: Vector[Int], reward: Double, s1: Vector[Double], collided: Boolean)
+
+  /**
+    * Does an update step in a reinforcement learning setting.
+    * @param collisionLines the collision lines to be checked by the sensors.
+    * @param allPathLines the path lines to be checked to identify the end of an episode.
+    * @param gamma the discount factor.
+    * @param eps the epsilon used by the epsilon greedy policy.
+    * @param targetQ the target network.
+    * @param miniBatch the minibatch sampled from replay memory.
+    * @param lr the learning rate for gradient descent.
+    */
+  def updateQStep(collisionLines: Seq[CLine], allPathLines: Seq[Line], gamma: Double, eps: Double, targetQ: NeuralNetwork,
+                  miniBatch: Seq[Experience], lr: Double): State[Ufo, (Experience, Boolean)] = {
+    State(u => {
+
+      // Current state s
+      val s = u.getSensorValues(collisionLines)
+
+      val feedAndForward: State[NeuralNetwork, Unit] = for {
+        _ <- NeuralNetwork.input(s)
+        _ <- NeuralNetwork.feedForward
+      } yield ()
+
+      val forwardedNn = feedAndForward.exec(u.nn)
+      val outputValues = forwardedNn.outputLayer.neurons.map(n => n.value)
+      val greedy = outputValues.map(v => if (v == outputValues.max) 1 else 0)
+
+      // With prob eps select a random action a
+      // otherwise select greedy action
+      val keys = if (Math.random() > eps) {
+          greedy
+        } else {
+          val randomAction = {
+            val randomIndex = Random.nextInt(3)
+            randomIndex
+          }
+          Vector(0, 0, 0).updated(randomAction, 1)
+        }
+
+      // Execute action a and observe reward r and next state s'
+      val (collided, nextUfo) = (for {
+        _ <- Ufo.update(keys)
+        hasCollided <- Ufo.collided(allPathLines)
+      } yield hasCollided).run(u)
+
+      // Next state s'
+      val s1 = nextUfo.getSensorValues(collisionLines)
+
+      val reward: Double = - Math.pow(2, Math.abs(s1(1)-s1(0)))
+
+      // New sampled experience E = (s, a, r, s', end_of_episode_flag)
+      val newExperience = Experience(s, keys, reward, s1, collided)
+
+      // Train using a minibatch of experiences from the replay memory
+      if (miniBatch.nonEmpty) {
+        val trainData = miniBatch.foldLeft(Vector[(Vector[Double], Vector[Double])]())(
+          (acc, e) => {
+
+            val targets = outputValues.zip(e.keys).map {
+              case (_, key) if key == 1 =>
+
+                if (!e.collided) {
+                  // find greedy action by using the target network
+                  val greedyActionReward = (for {
+                    _ <- NeuralNetwork.input(e.s1)
+                    _ <- NeuralNetwork.feedForward
+                  } yield ()).exec(targetQ).outputLayer.neurons.map(n => n.value).max
+
+                  e.reward + gamma * greedyActionReward
+                } else { // end of episode
+                  e.reward
+                }
+              case (q, _) => q
+            }
+            acc :+ (e.s, targets)
+          }
+        )
+        val trainedUfo = Ufo.updateNn(NeuralNetwork.mgd(trainData, HalfSquaredLoss, lr).exec(forwardedNn)).exec(nextUfo)
+        ((newExperience, collided), trainedUfo)
+      } else {
+        ((newExperience, collided), nextUfo)
+      }
     })
   }
 
   /**
-    * Updates ufo's sensors, velocity, position, traveled distance and rotation according to the input keys
-    * and the time passed.
+    * Updates ufo's sensors, velocity, position, traveled distance and rotation according to the input keys.
     * @param keys the movement commands.
-    * @param dt time passed since last update.
     */
-  private def update(keys: Vector[Int], dt: Double): State[Ufo, Unit] = {
+  def update(keys: Vector[Int]): State[Ufo, Unit] = {
     State(u => {
 
       val newRotation = u.rotation + RotationSpeed * (- keys(0) + keys(1))
@@ -147,11 +250,11 @@ object Ufo {
 
   /**
     * Checks if the ufo has collided with the circuit.
-    * @param allPathLines the circuit lines checked for finding an eventual collision.
+    * @param circuitLines the circuit lines checked to find an eventual collision.
     */
-  def collided(allPathLines: Seq[Line]): State[Ufo, Boolean] = {
+  def collided(circuitLines: Seq[Line]): State[Ufo, Boolean] = {
     State(u => {
-      (allPathLines.exists(pl => {
+      (circuitLines.exists(pl => {
         val intersection = Shape.intersect(pl, u.circle)
         intersection.getBoundsInLocal.getMinX != 0 && intersection.getBoundsInLocal.getMaxX != 0
       }), u)

@@ -10,15 +10,15 @@ import scalafx.scene.shape.Line
 /**
   * Sensor unit.
   */
-class Sensor(val line: Line, val rot: Double) {
+class Sensor(val start: (Double, Double), val theta: Double, val rot: Double) {
+
+  val line = Line(start._1, start._2, start._1 + Sensor.Length*Math.cos(Math.toRadians(theta)),
+                                      start._2 - Sensor.Length*Math.sin(Math.toRadians(theta)))
 
   def startX: Double = line.startX.value
   def endX: Double = line.endX.value
   def startY: Double = line.startY.value
   def endY: Double = line.endY.value
-
-  val op1: Double = (endX - startX) / (5 * 80)
-  val op2: Double = (endY - startY) / (5 * 80)
 
   val cPoint: CPoint = CPoint(startX, startY)
   val cLine: CLine = {
@@ -27,16 +27,30 @@ class Sensor(val line: Line, val rot: Double) {
     CLine(CPoint(startX, startY), CPoint(rX, rY))
   }
 
+  /**
+    * Retrieves the distance sensed.
+    * @param collisionLines the lines to be checked for finding the distance.
+    */
+  def value(collisionLines: Seq[CLine]): Double = {
+    val intersectionPoints = collisionLines.map(l => CollisionDetector.findDistance(
+      cPoint, CollisionDetector.intersection(cLine.p1, cLine.p2, l.p1, l.p2).getOrElse(cPoint))).filter(_ != 0)
+
+    if (intersectionPoints.nonEmpty) intersectionPoints.min else 0
+  }
+
 }
 
 object Sensor {
 
+  val Length  = 100
+
   /**
     * Factory for [[Sensor]]
-    * @param line the line representing the sensor range.
-    * @param rot the rotation of the sensor line.
+    * @param start the center point of the unit where is attached.
+    * @param theta the sensor angle
+    * @param rot the rotation of the unit where is attached.
     */
-  def apply(line: Line, rot: Double): Sensor = new Sensor(line, rot)
+  def apply(start: (Double, Double), theta: Double, rot: Double): Sensor = new Sensor(start, theta, rot)
 
   /**
     * Updates the sensor according to the new position and rotation of the unit where the sensor is attached.
@@ -45,19 +59,8 @@ object Sensor {
     */
   def update(newPosition: Vector[Double], newRotation: Double): State[Sensor, Unit] = {
     State(s => {
-      ((), Sensor(Line(newPosition(0), newPosition(1), newPosition(0) + 5*80 * s.op1, newPosition(1) + 5 * 80 * s.op2), newRotation))
+      ((), Sensor((newPosition(0), newPosition(1)), s.theta, newRotation))
     })
   }
 
-  /**
-    * Retrieves the distance from the circuit.
-    * @param collisionLines the lines to be checked for finding the distance.
-    */
-  def value(collisionLines: Seq[CLine]): State[Sensor, Double] = {
-    State(s => {
-      val intersectionPoints = collisionLines.map(l => CollisionDetector.findDistance(
-        s.cPoint, CollisionDetector.intersection(s.cLine, l).getOrElse(CPoint(-1000, -1000))))
-      (intersectionPoints.min, s)
-    })
-  }
 }
