@@ -31,7 +31,7 @@ class NeuralNetwork  (val layers: Vector[Layer], val weights: Vector[Matrix]) {
               acc :+ l2.neurons.foldLeft(Vector[Double]()) {
                 case (acc2, n2) =>
                   acc2 :+ (if (n2 != l2.neurons.last) n2.value * n.activationFunction.df(n.z) * targetDiff(i)
-                           else n.activationFunction.df(n.value) * targetDiff(i))
+                           else n.activationFunction.df(n.z) * targetDiff(i))
               }
           }
 

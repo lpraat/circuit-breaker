@@ -83,16 +83,16 @@ class NeuralNetworkTest extends FunSuite {
     }
     assert(areDoubleEqual(updatedNn.weights(0)(0)(0), 0.149780716)) // w1
     assert(areDoubleEqual(updatedNn.weights(0)(0)(1), 0.19956143))  // w2
-    assert(areDoubleEqual(updatedNn.weights(0)(0)(2), 0.34583369))  // b0
+    assert(areDoubleEqual(updatedNn.weights(0)(0)(2), 0.34561432))  // b0
     assert(areDoubleEqual(updatedNn.weights(0)(1)(0), 0.24975114))  // w3
     assert(areDoubleEqual(updatedNn.weights(0)(1)(1), 0.29950229))  // w4
-    assert(areDoubleEqual(updatedNn.weights(0)(1)(2), 0.34526327))  // b1
+    assert(areDoubleEqual(updatedNn.weights(0)(1)(2), 0.34502287))  // b1
     assert(areDoubleEqual(updatedNn.weights(1)(0)(0), 0.35891648))  // w5
     assert(areDoubleEqual(updatedNn.weights(1)(0)(1), 0.408666186)) // w6
-    assert(areDoubleEqual(updatedNn.weights(1)(0)(2), 0.51926966))  // b2
+    assert(areDoubleEqual(updatedNn.weights(1)(0)(2), 0.53075072))  // b2
     assert(areDoubleEqual(updatedNn.weights(1)(1)(0), 0.511301270)) // w7
     assert(areDoubleEqual(updatedNn.weights(1)(1)(1), 0.561370121)) // w8
-    assert(areDoubleEqual(updatedNn.weights(1)(1)(2), 0.62345319))  // b3
+    assert(areDoubleEqual(updatedNn.weights(1)(1)(2), 0.61904912))  // b3
 
   }
 
