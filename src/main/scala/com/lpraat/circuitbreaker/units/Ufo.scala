@@ -72,7 +72,7 @@ object Ufo {
   def apply(kind: String): Ufo = {
 
     val startingPosition: Vector[Double] = Vector(InitialPosX, InitialPosY)
-    val thetas = List(-60, 60)
+    val thetas = List(-5, -10, -20, -30, -40, -50, -60, 0, 5, 10, 20, 30, 40, 50, 60)
     val NumberOfSensors = thetas.size
     val startX = startingPosition(0)
     val startY = startingPosition(1)
@@ -193,8 +193,8 @@ object Ufo {
       // Next state s'
       val s1 = nextUfo.getSensorValues(collisionLines)
 
-      val reward: Double = - Math.pow(2, Math.abs(s1(1)-s1(0)))
-
+      val reward: Double = - s1.sum
+      print(reward)
       // New sampled experience E = (s, a, r, s', end_of_episode_flag)
       val newExperience = Experience(s, keys, reward, s1, collided)
 
@@ -202,6 +202,12 @@ object Ufo {
       if (miniBatch.nonEmpty) {
         val trainData = miniBatch.foldLeft(Vector[(Vector[Double], Vector[Double])]())(
           (acc, e) => {
+
+            val outputValues= (for {
+              _ <- NeuralNetwork.input(e.s)
+              _ <- NeuralNetwork.feedForward
+            } yield ()).exec(u.nn).outputLayer.neurons.map(n => n.value)
+
 
             val targets = outputValues.zip(e.keys).map {
               case (_, key) if key == 1 =>
