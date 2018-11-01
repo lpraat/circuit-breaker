@@ -25,8 +25,6 @@ object State {
   def unit[A,S](a: A): State[S,A] =
     State(s => (a, s))
 
-
-
   def get[S]: State[S, S] =
     State(s => (s, s))
 

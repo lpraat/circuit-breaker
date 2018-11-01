@@ -95,7 +95,7 @@ object Ufo {
       case "ga" =>
         // sensors + bias
         val inputLayer: Layer = Layer(Vector.fill(NumberOfSensors)(Neuron(Identity)) :+ Neuron(Identity))
-        val hiddenLayer: Layer = Layer(Vector.fill(10)(Neuron(Sigmoid)) :+ Neuron(Identity))
+        val hiddenLayer: Layer = Layer(Vector.fill(40)(Neuron(Sigmoid)) :+ Neuron(Identity))
         // right-left
         val outputLayer: Layer = Layer(Vector.fill(2)(Neuron(Sigmoid)))
 
@@ -104,7 +104,7 @@ object Ufo {
       case "rl" =>
         // sensors + bias
         val inputLayer = Layer(Vector.fill(NumberOfSensors)(Neuron(Identity)):+ Neuron(Identity))
-        val hiddenLayer = Layer(Vector.fill(10)(Neuron(ReLU)) :+ Neuron(Identity))
+        val hiddenLayer = Layer(Vector.fill(40)(Neuron(ReLU)) :+ Neuron(Identity))
         // Q(s,a) for the three actions either rotate left or right or do nothing.
         val outputLayer = Layer(Vector.fill(3)(Neuron(Identity)))
 
@@ -205,7 +205,6 @@ object Ufo {
       val s1 = nextUfo.getSensorValues(collisionLines)
 
       val reward: Double = - s1.sum
-      print(reward)
       // New sampled experience E = (s, a, r, s', end_of_episode_flag)
       val newExperience = Experience(s, keys, reward, s1, collided)
 
