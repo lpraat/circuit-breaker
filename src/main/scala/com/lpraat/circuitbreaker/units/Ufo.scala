@@ -37,6 +37,17 @@ class Ufo(val sensors: Seq[Sensor], val nn: NeuralNetwork,
     }).toVector
   }
 
+  /**
+    * Checks if the ufo has collided with the circuit.
+    * @param circuitLines the circuit lines checked to find an eventual collision.
+    */
+  def collided(circuitLines: Seq[Line]): Boolean = {
+      circuitLines.exists(pl => {
+        val intersection = Shape.intersect(pl, this.circle)
+        intersection.getBoundsInLocal.getMinX != 0 && intersection.getBoundsInLocal.getMaxX != 0
+      })
+    }
+
 }
 
 
@@ -187,8 +198,8 @@ object Ufo {
       // Execute action a and observe reward r and next state s'
       val (collided, nextUfo) = (for {
         _ <- Ufo.update(keys)
-        hasCollided <- Ufo.collided(allPathLines)
-      } yield hasCollided).run(u)
+        updatedUfo <- State.get
+      } yield updatedUfo.collided(allPathLines)).run(u)
 
       // Next state s'
       val s1 = nextUfo.getSensorValues(collisionLines)
@@ -251,19 +262,6 @@ object Ufo {
       val traveledDistance = u.distance + Utils.distance(u.position(0), u.position(1), newPosition(0), newPosition(1))
 
       ((), Ufo(updatedSensors, u.nn, newVelocity, newPosition, traveledDistance, newRotation))
-    })
-  }
-
-  /**
-    * Checks if the ufo has collided with the circuit.
-    * @param circuitLines the circuit lines checked to find an eventual collision.
-    */
-  def collided(circuitLines: Seq[Line]): State[Ufo, Boolean] = {
-    State(u => {
-      (circuitLines.exists(pl => {
-        val intersection = Shape.intersect(pl, u.circle)
-        intersection.getBoundsInLocal.getMinX != 0 && intersection.getBoundsInLocal.getMaxX != 0
-      }), u)
     })
   }
 

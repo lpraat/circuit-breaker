@@ -26,7 +26,7 @@ object State {
     State(s => (a, s))
 
 
-  /*
+
   def get[S]: State[S, S] =
     State(s => (s, s))
 
@@ -37,5 +37,4 @@ object State {
     s <- get
     _ <- set(f(s))
   } yield ()
-  */
 }

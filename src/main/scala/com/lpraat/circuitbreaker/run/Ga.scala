@@ -76,8 +76,8 @@ object Ga extends JFXApp {
 
       def updateUfo(dt: Double): State[Ufo, Boolean] = for {
         _ <- Ufo.updateStep(collisionLines)
-        hasCollided <- Ufo.collided(allPathLines)
-      } yield hasCollided
+        updatedUfo <- State.get
+      } yield updatedUfo.collided(allPathLines)
 
 
       def fitness(u: Ufo): Double = {
